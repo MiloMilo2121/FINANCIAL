@@ -1,0 +1,122 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: financial-projection-platform
+
+build:
+  artifacts:
+    - image: financial/ingestion
+      context: services/ingestion
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.py"
+            dest: /app
+
+    - image: financial/etl
+      context: services/etl
+      docker:
+        dockerfile: Dockerfile
+
+    - image: financial/ml-service
+      context: services/ml-service
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.py"
+            dest: /app
+
+    - image: financial/sentiment
+      context: services/sentiment
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.py"
+            dest: /app
+
+    - image: financial/api-gateway
+      context: services/api-gateway
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.py"
+            dest: /app
+
+    - image: financial/frontend
+      context: frontend
+      docker:
+        dockerfile: Dockerfile
+
+profiles:
+  - name: dev
+    activation:
+      - command: dev
+    build:
+      local:
+        push: false
+    deploy:
+      kubectl:
+        manifests:
+          - infra/k8s/namespaces.yaml
+          - infra/k8s/services/ingestion/dev-*.yaml
+          - infra/k8s/services/ml/dev-*.yaml
+          - infra/k8s/services/sentiment/dev-*.yaml
+          - infra/k8s/services/api-gateway/dev-*.yaml
+          - infra/k8s/services/frontend/dev-*.yaml
+    portForward:
+      - resourceType: service
+        resourceName: api-gateway
+        port: 8000
+        localPort: 8000
+      - resourceType: service
+        resourceName: ml-service
+        port: 8002
+        localPort: 8002
+      - resourceType: service
+        resourceName: frontend
+        port: 3000
+        localPort: 3000
+
+  - name: staging
+    build:
+      googleCloudBuild:
+        projectId: financial-staging
+        diskSizeGb: 100
+        machineType: E2_HIGHCPU_8
+    deploy:
+      kubectl:
+        manifests:
+          - infra/k8s/namespaces.yaml
+          - infra/k8s/services/*/staging-*.yaml
+          - infra/k8s/network-policies.yaml
+          - infra/k8s/workload-identity.yaml
+
+  - name: prod
+    build:
+      googleCloudBuild:
+        projectId: financial-prod
+        diskSizeGb: 100
+        machineType: E2_HIGHCPU_32
+    deploy:
+      kubectl:
+        manifests:
+          - infra/k8s/namespaces.yaml
+          - infra/k8s/services/*/prod-*.yaml
+          - infra/k8s/network-policies.yaml
+          - infra/k8s/workload-identity.yaml
+
+modules:
+  - name: ingestion
+    path: services/ingestion/skaffold.yaml
+  - name: ml
+    path: services/ml-service/skaffold.yaml
+  - name: sentiment
+    path: services/sentiment/skaffold.yaml
+  - name: api-gateway
+    path: services/api-gateway/skaffold.yaml
+  - name: frontend
+    path: frontend/skaffold.yaml

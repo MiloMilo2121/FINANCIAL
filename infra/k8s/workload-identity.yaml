@@ -1,0 +1,44 @@
+---
+# Kubernetes Service Account for ingestion service
+# Bound to GCP Service Account via Workload Identity
+# Grants: pubsub.publisher, storage.objectCreator (minimal permissions)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-ingestion
+  namespace: financial
+  annotations:
+    # This annotation binds the KSA to the GSA
+    iam.gke.io/gcp-service-account: financial-ingestion-prod@PROJECT_ID.iam.gserviceaccount.com
+  labels:
+    app: ingestion
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-ml
+  namespace: financial
+  annotations:
+    iam.gke.io/gcp-service-account: financial-ml-prod@PROJECT_ID.iam.gserviceaccount.com
+  labels:
+    app: ml-service
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-sentiment
+  namespace: financial
+  annotations:
+    iam.gke.io/gcp-service-account: financial-sentiment-prod@PROJECT_ID.iam.gserviceaccount.com
+  labels:
+    app: sentiment
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-api-gateway
+  namespace: financial
+  annotations:
+    iam.gke.io/gcp-service-account: financial-gateway-prod@PROJECT_ID.iam.gserviceaccount.com
+  labels:
+    app: api-gateway

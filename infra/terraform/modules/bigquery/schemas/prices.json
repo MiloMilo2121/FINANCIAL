@@ -1,0 +1,104 @@
+[
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event timestamp in UTC"
+  },
+  {
+    "name": "asset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Asset symbol (XAU, XAG, XPT, XPD, etc.)"
+  },
+  {
+    "name": "source",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Data source connector name"
+  },
+  {
+    "name": "asset_class",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Asset class (precious_metal, equity, etf, commodity)"
+  },
+  {
+    "name": "open",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Opening price in USD"
+  },
+  {
+    "name": "high",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "High price in USD"
+  },
+  {
+    "name": "low",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Low price in USD"
+  },
+  {
+    "name": "close",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Closing price in USD"
+  },
+  {
+    "name": "volume",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Trading volume"
+  },
+  {
+    "name": "price",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Spot price (for tick data)"
+  },
+  {
+    "name": "currency",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Original currency before USD normalization"
+  },
+  {
+    "name": "resolution",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Bar resolution (1D, 1H, 1M, etc.)"
+  },
+  {
+    "name": "log_price",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Natural log of price (ETL enrichment)"
+  },
+  {
+    "name": "log_return",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Log return from previous period"
+  },
+  {
+    "name": "is_outlier",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "Flagged as outlier by ETL pipeline"
+  },
+  {
+    "name": "pipeline_version",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ETL pipeline version that processed this row"
+  },
+  {
+    "name": "ingested_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Ingestion timestamp"
+  }
+]

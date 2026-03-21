@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "financial-etl"
+version = "0.1.0"
+description = "Apache Beam ETL pipelines for Financial Projection Platform"
+requires-python = ">=3.11"
+dependencies = [
+    "financial-shared",
+    "apache-beam[gcp]>=2.53",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "structlog>=23.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

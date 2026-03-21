@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles for Bloomberg Terminal aesthetic */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1e1e1e #0a0a0a;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: #1e1e1e;
+    border-radius: 3px;
+  }
+
+  body {
+    @apply bg-terminal-bg text-terminal-text font-mono;
+    font-size: 12px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Consistent input styling */
+  input, select, textarea {
+    @apply bg-terminal-panel border border-terminal-border text-terminal-text;
+    @apply rounded px-2 py-1 text-xs font-mono;
+    @apply focus:outline-none focus:border-gold-500;
+  }
+
+  /* Button base */
+  button {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  /* Terminal-style KPI value display */
+  .kpi-value {
+    @apply text-lg font-semibold text-terminal-text font-mono;
+  }
+
+  .kpi-positive {
+    @apply text-terminal-positive;
+  }
+
+  .kpi-negative {
+    @apply text-terminal-negative;
+  }
+
+  /* Panel header style */
+  .panel-header {
+    @apply text-terminal-muted uppercase tracking-wider text-xs font-mono;
+  }
+
+  /* Sparkline container */
+  .sparkline {
+    @apply inline-block h-4 w-16 align-middle;
+  }
+}

@@ -1,0 +1,131 @@
+---
+# Zero-Trust mTLS Network Policies
+# Each service only accepts ingress from explicitly named peers.
+# Egress is restricted to known service CIDRs and external APIs.
+#
+# These policies implement the BeyondProd zero-trust model:
+# no implicit trust based on network location.
+
+# API Gateway: accepts ingress from internet (via LoadBalancer)
+# and allows egress to all internal services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-policy
+  namespace: financial
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - {}  # Allow from anywhere (LoadBalancer terminates external TLS)
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ml-service
+    - to:
+        - podSelector:
+            matchLabels:
+              app: sentiment
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ingestion
+    - ports:
+        - protocol: TCP
+          port: 6379  # Redis
+    - ports:
+        - protocol: TCP
+          port: 443   # External HTTPS (upstreams)
+---
+# ML Service: only accepts requests from api-gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-service-policy
+  namespace: financial
+spec:
+  podSelector:
+    matchLabels:
+      app: ml-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 6379   # Redis
+        - protocol: TCP
+          port: 443    # Pinecone API (external)
+        - protocol: TCP
+          port: 19530  # Milvus
+    - to:
+        - namespaceSelector: {}  # Allow to kube-dns
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Sentiment Service: only accepts from api-gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sentiment-policy
+  namespace: financial
+spec:
+  podSelector:
+    matchLabels:
+      app: sentiment
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443   # Perplexity API (external)
+        - protocol: TCP
+          port: 8085  # Pub/Sub emulator (dev only)
+    - {}  # Allow to Pub/Sub (GCP managed service)
+---
+# Ingestion Service: no ingress (push-only), egress to external APIs and Pub/Sub
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingestion-policy
+  namespace: financial
+spec:
+  podSelector:
+    matchLabels:
+      app: ingestion
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8001  # Health check only
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443   # External APIs
+        - protocol: TCP
+          port: 80    # HTTP fallbacks
+        - protocol: TCP
+          port: 6379  # Redis

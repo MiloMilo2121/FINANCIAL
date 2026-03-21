@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: financial
+      POSTGRES_USER: financial
+      POSTGRES_PASSWORD: financial_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financial"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dev-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dev-network
+
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+    command: >
+      bash -c "
+        gcloud beta emulators pubsub start
+        --project=financial-dev
+        --host-port=0.0.0.0:8085
+      "
+    ports:
+      - "8085:8085"
+    environment:
+      CLOUDSDK_CORE_PROJECT: financial-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/v1/projects/financial-dev/topics"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - dev-network
+
+  fake-gcs:
+    image: fsouza/fake-gcs-server:latest
+    ports:
+      - "4443:4443"
+    command: -scheme http -port 4443 -external-url http://localhost:4443
+    volumes:
+      - gcs_data:/storage
+    networks:
+      - dev-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  gcs_data:
+
+networks:
+  dev-network:
+    driver: bridge

@@ -1,0 +1,140 @@
+[
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Prediction generation timestamp"
+  },
+  {
+    "name": "asset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Asset symbol (XAU, XAG, etc.)"
+  },
+  {
+    "name": "model_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Model used: lstm, xgboost, hybrid_ensemble, full_multimodal"
+  },
+  {
+    "name": "horizon_days",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Forecast horizon in trading days"
+  },
+  {
+    "name": "predicted_price",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Point estimate of predicted price"
+  },
+  {
+    "name": "confidence",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Model confidence score 0-1"
+  },
+  {
+    "name": "ensemble_weight_lstm",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "LSTM weight in ensemble"
+  },
+  {
+    "name": "ensemble_weight_xgb",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "XGBoost weight in ensemble"
+  },
+  {
+    "name": "heston_kappa",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Heston mean reversion speed"
+  },
+  {
+    "name": "heston_theta",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Heston long-run variance"
+  },
+  {
+    "name": "heston_sigma_v",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Heston volatility of volatility"
+  },
+  {
+    "name": "mc_paths",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Number of Monte Carlo paths"
+  },
+  {
+    "name": "mc_p5",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Monte Carlo 5th percentile"
+  },
+  {
+    "name": "mc_p25",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Monte Carlo 25th percentile"
+  },
+  {
+    "name": "mc_p50",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Monte Carlo median"
+  },
+  {
+    "name": "mc_p75",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Monte Carlo 75th percentile"
+  },
+  {
+    "name": "mc_p95",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Monte Carlo 95th percentile"
+  },
+  {
+    "name": "var_95",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Value at Risk at 95% confidence"
+  },
+  {
+    "name": "cvar_95",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Conditional VaR (Expected Shortfall) at 95%"
+  },
+  {
+    "name": "sentiment_score",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Perplexity sentiment score fused into prediction"
+  },
+  {
+    "name": "gpr_level",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Geopolitical risk level (0-4) at prediction time"
+  },
+  {
+    "name": "cache_hit",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "Whether result was served from semantic cache"
+  },
+  {
+    "name": "latency_ms",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Prediction latency in milliseconds"
+  }
+]

@@ -1,0 +1,104 @@
+[
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Sentiment analysis timestamp"
+  },
+  {
+    "name": "asset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Asset symbol"
+  },
+  {
+    "name": "headline",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "News headline analyzed"
+  },
+  {
+    "name": "source_url",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Source article URL"
+  },
+  {
+    "name": "overall_score",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Overall sentiment score -1.0 to 1.0"
+  },
+  {
+    "name": "overall_direction",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "BULLISH, BEARISH, or NEUTRAL"
+  },
+  {
+    "name": "overall_confidence",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Confidence in overall assessment 0-1"
+  },
+  {
+    "name": "supply_demand_score",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Supply/demand dimension score"
+  },
+  {
+    "name": "macro_score",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Macroeconomic dimension score"
+  },
+  {
+    "name": "geopolitical_score",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Geopolitical dimension score"
+  },
+  {
+    "name": "institutional_score",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Institutional flows dimension score"
+  },
+  {
+    "name": "threat_level",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Geopolitical threat level 0-4"
+  },
+  {
+    "name": "threat_regions",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON array of affected regions"
+  },
+  {
+    "name": "net_positioning",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "NET_LONG, NET_SHORT, or NEUTRAL"
+  },
+  {
+    "name": "citations",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON array of Perplexity citation URLs"
+  },
+  {
+    "name": "perplexity_model",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Perplexity model used"
+  },
+  {
+    "name": "processing_ms",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Perplexity API processing time in ms"
+  }
+]
