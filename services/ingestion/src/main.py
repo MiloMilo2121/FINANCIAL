@@ -33,6 +33,10 @@ from financial_ingestion.connectors.cboe import CBOEConnector
 from financial_ingestion.connectors.cftc import CFTCConnector
 from financial_ingestion.connectors.eia import EIAConnector
 from financial_ingestion.connectors.lbma import LBMAConnector
+from financial_ingestion.connectors.treasury_tic import TreasuryTICConnector
+from financial_ingestion.connectors.cftc_disagg import CFTCDisaggConnector
+from financial_ingestion.connectors.crypto_sentiment import CryptoSentimentConnector
+from financial_ingestion.connectors.wgc_demand import WGCDemandConnector
 from financial_ingestion.pipeline.publisher import MarketEventPublisher
 from financial_ingestion.pipeline.scheduler import ConnectorScheduleConfig, IngestionScheduler
 from financial_ingestion.rate_limiting.token_bucket import TokenBucketConfig, TokenBucketLimiter
@@ -223,6 +227,32 @@ async def startup() -> None:
     _scheduler.register(ConnectorScheduleConfig(
         connector=LBMAConnector(http_client),
         interval_seconds=settings.interval_macro,
+    ))
+
+    # ── New free-data connectors (Phase 2 — 334 indicator expansion) ─────────
+
+    # Treasury TIC: monthly (data released ~6 weeks after month-end)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=TreasuryTICConnector(http_client),
+        interval_seconds=86400,  # Daily poll; data changes monthly
+    ))
+
+    # CFTC Disaggregated COT: weekly (report released every Friday)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=CFTCDisaggConnector(http_client),
+        interval_seconds=86400,  # Daily poll; data changes weekly
+    ))
+
+    # Crypto sentiment + gold-backed tokens: daily
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=CryptoSentimentConnector(http_client),
+        interval_seconds=settings.interval_macro,
+    ))
+
+    # WGC supply & demand + ETF flows: daily (ETF) / quarterly (demand)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=WGCDemandConnector(http_client),
+        interval_seconds=86400,  # Daily for ETF; quarterly data auto-cached
     ))
 
     _scheduler.start()

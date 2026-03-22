@@ -1,9 +1,17 @@
-"""Feature Registry — 175 IndicatorMeta definitions.
+"""Feature Registry — 334 IndicatorMeta definitions.
 
 Every indicator in the system is registered here with full metadata.
 INDICATOR_REGISTRY is the single source of truth for feature ordering,
 sourcing, and documentation. The FeaturePipeline uses this registry to
 build its output vector (always in registration order).
+
+Breakdown (334 total):
+  Technical (75) + Macro (49) + Precious Metal (24) + Alternative (17)
+  + Correlations (10) + ML Features (16) + Calendar (18) + Factor (8)
+  + New Macro FRED (20) + COT Disagg (8) + De-dollarization (8)
+  + Physical Microstructure (12) + ETF Flows (9) + WGC Demand (13)
+  + GPR Sub-indexes (6) + Crypto & Digital (10) + Options/Derivatives (6)
+  + Extra Technical (25)
 """
 
 from __future__ import annotations
@@ -63,6 +71,91 @@ def _corr(name, desc):
         name=name, category="correlation", description=desc, source="ohlcv",
         is_computed=True, freq="1d", tags=["correlation"],
         requires=["close"],
+    )
+
+
+def _ml(name, desc, requires=None):
+    return IndicatorMeta(
+        name=name, category="ml_feature", description=desc, source="computed",
+        is_computed=True, freq="1d", tags=["ml", "statistical"],
+        requires=requires or ["close"],
+    )
+
+
+def _cal(name, desc):
+    return IndicatorMeta(
+        name=name, category="calendar", description=desc, source="computed",
+        is_computed=True, freq="1d", tags=["calendar", "seasonality"],
+        requires=["date"],
+    )
+
+
+def _fac(name, desc, requires=None):
+    return IndicatorMeta(
+        name=name, category="factor", description=desc, source="computed",
+        is_computed=True, freq="1d", tags=["factor", "risk_premium"],
+        requires=requires or ["close"],
+    )
+
+
+def _phy(name, desc, source, freq="1d"):
+    return IndicatorMeta(
+        name=name, category="physical_microstructure", description=desc,
+        source=source, is_computed=False, freq=freq,
+        tags=["physical", "microstructure"], requires=[],
+    )
+
+
+def _etf(name, desc, freq="1d"):
+    return IndicatorMeta(
+        name=name, category="etf_flows", description=desc, source="etf",
+        is_computed=False, freq=freq, tags=["etf", "flows"], requires=[],
+    )
+
+
+def _tic(name, desc):
+    return IndicatorMeta(
+        name=name, category="dedollarization", description=desc,
+        source="treasury_tic", is_computed=False, freq="1m",
+        tags=["dedollarization", "tic"], requires=[],
+    )
+
+
+def _opt(name, desc):
+    return IndicatorMeta(
+        name=name, category="options", description=desc, source="cme_cvol",
+        is_computed=False, freq="1d", tags=["options", "derivatives"],
+        requires=[],
+    )
+
+
+def _gpr_sub(name, desc):
+    return IndicatorMeta(
+        name=name, category="alternative", description=desc, source="gpr_index",
+        is_computed=False, freq="1m", tags=["alternative", "geopolitical"],
+        requires=[],
+    )
+
+
+def _crypto(name, desc, freq="1d"):
+    return IndicatorMeta(
+        name=name, category="crypto", description=desc, source="crypto_sentiment",
+        is_computed=False, freq=freq, tags=["crypto", "digital"],
+        requires=[],
+    )
+
+
+def _cot_d(name, desc):
+    return IndicatorMeta(
+        name=name, category="cot_disagg", description=desc, source="cftc_disagg",
+        is_computed=False, freq="1w", tags=["cot", "positioning"], requires=[],
+    )
+
+
+def _wgc(name, desc, freq="1q"):
+    return IndicatorMeta(
+        name=name, category="wgc_demand", description=desc, source="wgc_demand",
+        is_computed=False, freq=freq, tags=["wgc", "supply_demand"], requires=[],
     )
 
 
@@ -274,6 +367,202 @@ INDICATOR_REGISTRY: dict[str, IndicatorMeta] = {
     "Gold_copper_corr_30d": _corr("Gold_copper_corr_30d", "Gold vs Copper 30-day rolling correlation"),
     "Gold_silver_corr_30d": _corr("Gold_silver_corr_30d", "Gold vs Silver 30-day rolling correlation"),
     "Gold_BTC_corr_30d":    _corr("Gold_BTC_corr_30d",    "Gold vs Bitcoin 30-day rolling correlation"),
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ── NEW INDICATORS (175 → 334) ────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # ── ML Feature Engineering (16) ──────────────────────────────────────────
+    "Hurst_120d":           _ml("Hurst_120d",           "Hurst exponent via R/S analysis (120-day window)"),
+    "HMM_bull_prob":        _ml("HMM_bull_prob",        "Hidden Markov Model bull state probability"),
+    "HMM_bear_prob":        _ml("HMM_bear_prob",        "Hidden Markov Model bear state probability"),
+    "HMM_volatile_prob":    _ml("HMM_volatile_prob",    "Hidden Markov Model volatile/sideways state probability"),
+    "Fourier_annual_sin":   _ml("Fourier_annual_sin",   "Annual Fourier sin term (365-day cycle)", ["date"]),
+    "Fourier_annual_cos":   _ml("Fourier_annual_cos",   "Annual Fourier cos term (365-day cycle)", ["date"]),
+    "Fourier_semiannual_sin":_ml("Fourier_semiannual_sin","Semi-annual Fourier sin term (183-day cycle)", ["date"]),
+    "Fourier_semiannual_cos":_ml("Fourier_semiannual_cos","Semi-annual Fourier cos term (183-day cycle)", ["date"]),
+    "Fourier_quarterly_sin":_ml("Fourier_quarterly_sin","Quarterly Fourier sin term (91-day cycle)", ["date"]),
+    "Fourier_quarterly_cos":_ml("Fourier_quarterly_cos","Quarterly Fourier cos term (91-day cycle)", ["date"]),
+    "Wavelet_DWT_scale2":   _ml("Wavelet_DWT_scale2",   "Discrete Wavelet Transform detail coeff. scale~4d"),
+    "Wavelet_DWT_scale8":   _ml("Wavelet_DWT_scale8",   "Discrete Wavelet Transform detail coeff. scale~16d"),
+    "Realized_skewness_30d":_ml("Realized_skewness_30d","30-day realized return skewness"),
+    "Realized_kurtosis_30d":_ml("Realized_kurtosis_30d","30-day realized return kurtosis"),
+    "Kalman_beta_SPX":      _ml("Kalman_beta_SPX",      "Time-varying Kalman filter beta to S&P500", ["close","benchmark"]),
+    "Sample_entropy_30d":   _ml("Sample_entropy_30d",   "30-day sample entropy of log-returns (complexity)"),
+
+    # ── Calendar / Seasonality Features (18) ────────────────────────────────
+    "Month_sin":                _cal("Month_sin",                "Month of year cyclical encoding — sin"),
+    "Month_cos":                _cal("Month_cos",                "Month of year cyclical encoding — cos"),
+    "CNY_proximity":            _cal("CNY_proximity",            "Proximity to Chinese New Year (0-1 triangular)"),
+    "Diwali_proximity":         _cal("Diwali_proximity",         "Proximity to Diwali festival (0-1 triangular)"),
+    "Indian_wedding_season":    _cal("Indian_wedding_season",    "Indian wedding season flag (Oct–Dec = 1)"),
+    "Indian_harvest_season":    _cal("Indian_harvest_season",    "Indian harvest/Akshaya Tritiya season (Apr–May = 1)"),
+    "Ramadan_proximity":        _cal("Ramadan_proximity",        "Proximity to Ramadan start (Turkish/ME demand)"),
+    "FOMC_meeting_flag":        _cal("FOMC_meeting_flag",        "FOMC meeting day binary flag"),
+    "Days_to_FOMC":             _cal("Days_to_FOMC",             "Normalized days to next FOMC meeting (0-1)"),
+    "FOMC_blackout_flag":       _cal("FOMC_blackout_flag",       "FOMC blackout period flag (10 days pre-meeting)"),
+    "COMEX_FND_flag":           _cal("COMEX_FND_flag",           "COMEX gold futures First Notice Day flag"),
+    "COMEX_options_expiry":     _cal("COMEX_options_expiry",     "COMEX gold options expiry day flag"),
+    "COMEX_quarterly_delivery": _cal("COMEX_quarterly_delivery", "COMEX active delivery month flag (Feb/Apr/Jun/Aug/Oct/Dec)"),
+    "Quarter_end_flag":         _cal("Quarter_end_flag",         "Quarter-end flag (last 5 days of Mar/Jun/Sep/Dec)"),
+    "Year_end_flag":            _cal("Year_end_flag",            "Year-end flag (last 10 days of Dec)"),
+    "Day_of_week_sin":          _cal("Day_of_week_sin",          "Day of week cyclical encoding — sin"),
+    "Day_of_week_cos":          _cal("Day_of_week_cos",          "Day of week cyclical encoding — cos"),
+    "NFP_release_flag":         _cal("NFP_release_flag",         "Non-Farm Payrolls release day flag (first Friday of month)"),
+
+    # ── Factor Model Features (8) ────────────────────────────────────────────
+    "Gold_carry_factor":              _fac("Gold_carry_factor",              "Gold carry factor = GOFO_1m − SOFR (Erb & Harvey 2013)"),
+    "Gold_momentum_12_1":             _fac("Gold_momentum_12_1",             "Gold 12-1 month price momentum"),
+    "Gold_cross_sectional_momentum":  _fac("Gold_cross_sectional_momentum",  "Gold cross-sectional momentum vs commodities"),
+    "Gold_value_factor":              _fac("Gold_value_factor",              "Gold real price / 10Y moving average (value ratio)"),
+    "Gold_commodity_ratio":           _fac("Gold_commodity_ratio",           "Gold price / commodity basket proxy (BCOM proxy)"),
+    "GDX_GDXJ_ratio":                 _fac("GDX_GDXJ_ratio",                "GDX senior miners / GDXJ junior miners price ratio"),
+    "Gold_VRP":                       _fac("Gold_VRP",                       "Gold Variance Risk Premium = HV20 − GVZ implied vol"),
+    "Gold_contango_backwardation":     _fac("Gold_contango_backwardation",    "Gold forward curve slope (GOFO_3m − GOFO_1m)"),
+
+    # ── New Macro — FRED Free (20) ───────────────────────────────────────────
+    "TIPS_5Y":                _macro("TIPS_5Y",                "5-Year TIPS Real Yield (%)", "fred"),
+    "TIPS_30Y":               _macro("TIPS_30Y",               "30-Year TIPS Real Yield (%)", "fred"),
+    "Real_Fed_Funds_Rate":    _macro("Real_Fed_Funds_Rate",    "Real Federal Funds Rate (FFR - CPI YoY)", "fred"),
+    "Fed_balance_sheet_bn":   _macro("Fed_balance_sheet_bn",   "Fed Balance Sheet total assets ($ billions, WALCL)", "fred"),
+    "Fed_balance_sheet_yoy":  _macro("Fed_balance_sheet_yoy",  "Fed Balance Sheet YoY change (%)", "fred"),
+    "US_debt_gdp":            _macro("US_debt_gdp",            "US Federal Debt as % of GDP", "fred", "1q"),
+    "US_current_account_gdp": _macro("US_current_account_gdp","US Current Account Balance as % of GDP", "fred", "1q"),
+    "EPU_US_daily":           _macro("EPU_US_daily",           "US Economic Policy Uncertainty Index (Baker et al.)", "fred"),
+    "EPU_global":             _macro("EPU_global",             "Global Economic Policy Uncertainty Index", "fred"),
+    "EPU_trade":              _macro("EPU_trade",              "US Trade Policy Uncertainty Index", "fred"),
+    "NY_Fed_recession_prob":  _macro("NY_Fed_recession_prob",  "NY Fed 12-month US Recession Probability (%)", "fred", "1m"),
+    "OECD_CLI_USA":           _macro("OECD_CLI_USA",           "OECD Composite Leading Indicator — US", "fred", "1m"),
+    "OECD_CLI_G7":            _macro("OECD_CLI_G7",            "OECD Composite Leading Indicator — G7", "fred", "1m"),
+    "GVZ_index":              _macro("GVZ_index",              "CBOE Gold Volatility Index (GVZ)", "cboe"),
+    "NFCI":                   _macro("NFCI",                   "Chicago Fed National Financial Conditions Index", "fred"),
+    "ANFCI":                  _macro("ANFCI",                  "Chicago Fed Adjusted NFCI", "fred"),
+    "BDI":                    _macro("BDI",                    "Baltic Dry Index (global shipping cost proxy)", "quandl"),
+    "ISM_New_Orders":         _macro("ISM_New_Orders",         "ISM Manufacturing New Orders Index", "fred", "1m"),
+    "SOFR":                   _macro("SOFR",                   "Secured Overnight Financing Rate (%)", "fred"),
+    "OIS_10Y_spread":         _macro("OIS_10Y_spread",         "OIS-Treasury 10Y spread (systemic risk proxy)", "fred"),
+
+    # ── COT Disaggregated — CFTC PRE API (8) ────────────────────────────────
+    "COT_MM_net_gold":       _cot_d("COT_MM_net_gold",       "CFTC Disagg: Managed Money net positions — COMEX Gold"),
+    "COT_MM_net_silver":     _cot_d("COT_MM_net_silver",     "CFTC Disagg: Managed Money net positions — COMEX Silver"),
+    "COT_MM_net_platinum":   _cot_d("COT_MM_net_platinum",   "CFTC Disagg: Managed Money net positions — COMEX Platinum"),
+    "COT_MM_net_palladium":  _cot_d("COT_MM_net_palladium",  "CFTC Disagg: Managed Money net positions — COMEX Palladium"),
+    "COT_SD_net_gold":       _cot_d("COT_SD_net_gold",       "CFTC Disagg: Swap Dealers net positions — COMEX Gold"),
+    "COT_SD_net_silver":     _cot_d("COT_SD_net_silver",     "CFTC Disagg: Swap Dealers net positions — COMEX Silver"),
+    "COT_PM_net_gold":       _cot_d("COT_PM_net_gold",       "CFTC Disagg: Producer/Merchant net positions — COMEX Gold"),
+    "COT_MM_pct_OI_gold":    _cot_d("COT_MM_pct_OI_gold",    "CFTC Disagg: Managed Money % of Open Interest — Gold"),
+
+    # ── De-dollarization & TIC — US Treasury Free (8) ───────────────────────
+    "TIC_foreign_official_total": _tic("TIC_foreign_official_total", "Foreign official holdings of US Treasuries ($ bn)"),
+    "TIC_china_holdings":         _tic("TIC_china_holdings",         "China holdings of US Treasuries ($ bn)"),
+    "TIC_japan_holdings":         _tic("TIC_japan_holdings",         "Japan holdings of US Treasuries ($ bn)"),
+    "TIC_opec_holdings":          _tic("TIC_opec_holdings",          "OPEC countries holdings of US Treasuries ($ bn)"),
+    "TIC_grand_total":            _tic("TIC_grand_total",            "Grand total foreign holdings of US Treasuries ($ bn)"),
+    "TIC_china_share":            _tic("TIC_china_share",            "China share of total foreign Treasury holdings (0-1)"),
+    "TIC_japan_share":            _tic("TIC_japan_share",            "Japan share of total foreign Treasury holdings (0-1)"),
+    "IMF_USD_reserve_share": IndicatorMeta(
+        name="IMF_USD_reserve_share", category="dedollarization",
+        description="IMF COFER: USD share of allocated global FX reserves (%)",
+        source="imf_cofer", is_computed=False, freq="1q",
+        tags=["dedollarization", "imf"], requires=[],
+    ),
+
+    # ── Physical Market Microstructure (12) ──────────────────────────────────
+    "SGE_volume":               _phy("SGE_volume",               "Shanghai Gold Exchange daily trading volume (kg)", "sge"),
+    "SGE_gold_premium":         _phy("SGE_gold_premium",         "SGE gold premium vs LBMA (USD/oz)", "sge"),
+    "COMEX_registered_gold":    _phy("COMEX_registered_gold",    "COMEX registered gold vault stocks (000 oz)", "comex"),
+    "COMEX_eligible_gold":      _phy("COMEX_eligible_gold",      "COMEX eligible gold vault stocks (000 oz)", "comex"),
+    "COMEX_stocks_OI_ratio":    _phy("COMEX_stocks_OI_ratio",    "COMEX registered stocks / open interest ratio", "comex"),
+    "LBMA_clearing_volume":     _phy("LBMA_clearing_volume",     "LBMA daily gold clearing volume (000 oz)", "lbma"),
+    "Swiss_gold_exports":       _phy("Swiss_gold_exports",       "Switzerland gold exports (tonnes, monthly)", "swiss_customs", "1m"),
+    "Swiss_gold_imports":       _phy("Swiss_gold_imports",       "Switzerland gold imports (tonnes, monthly)", "swiss_customs", "1m"),
+    "India_gold_imports":       _phy("India_gold_imports",       "India official gold imports (tonnes, monthly)", "india_customs", "1m"),
+    "HK_china_gold_flow":       _phy("HK_china_gold_flow",       "Hong Kong → Mainland China net gold flow (kg, monthly)", "hk_census", "1m"),
+    "COMEX_vault_coverage":     _phy("COMEX_vault_coverage",     "COMEX vault coverage ratio (registered/eligible)", "comex"),
+    "LBMA_gold_price_am":       _phy("LBMA_gold_price_am",       "LBMA Gold AM auction price (USD/oz)", "lbma"),
+
+    # ── ETF Flows Granular (9) ───────────────────────────────────────────────
+    "GLD_weekly_flow_t":        _etf("GLD_weekly_flow_t",        "SPDR GLD weekly net inflow/outflow (tonnes)"),
+    "IAU_weekly_flow_t":        _etf("IAU_weekly_flow_t",        "iShares IAU weekly net inflow/outflow (tonnes)"),
+    "SGOL_weekly_flow_t":       _etf("SGOL_weekly_flow_t",       "Aberdeen SGOL weekly net inflow/outflow (tonnes)"),
+    "PHYS_weekly_flow_t":       _etf("PHYS_weekly_flow_t",       "Sprott PHYS weekly net inflow/outflow (tonnes)"),
+    "Global_ETF_aum_t":         _etf("Global_ETF_aum_t",         "Global gold-backed ETF total AUM (tonnes)", "1d"),
+    "Asia_ETF_flow_t":          _etf("Asia_ETF_flow_t",          "Asia region gold ETF net weekly flow (tonnes)", "1w"),
+    "NorthAmerica_ETF_flow_t":  _etf("NorthAmerica_ETF_flow_t",  "North America gold ETF net weekly flow (tonnes)", "1w"),
+    "Europe_ETF_flow_t":        _etf("Europe_ETF_flow_t",        "Europe gold ETF net weekly flow (tonnes)", "1w"),
+    "WGC_etf_total_tonnes":     _etf("WGC_etf_total_tonnes",     "WGC total global gold ETF holdings (tonnes)", "1d"),
+
+    # ── WGC Supply & Demand Granular (13) ────────────────────────────────────
+    "WGC_tech_demand_t":         _wgc("WGC_tech_demand_t",         "WGC technology demand (tonnes, quarterly)"),
+    "WGC_bar_coin_demand_t":     _wgc("WGC_bar_coin_demand_t",     "WGC bar & coin investment demand (tonnes, quarterly)"),
+    "WGC_otc_demand_t":          _wgc("WGC_otc_demand_t",          "WGC OTC & other investment demand (tonnes, quarterly)"),
+    "WGC_india_jewelry_t":       _wgc("WGC_india_jewelry_t",       "WGC India jewelry demand (tonnes, quarterly)"),
+    "WGC_china_jewelry_t":       _wgc("WGC_china_jewelry_t",       "WGC China jewelry demand (tonnes, quarterly)"),
+    "WGC_china_bar_coin_t":      _wgc("WGC_china_bar_coin_t",      "WGC China bar & coin demand (tonnes, quarterly)"),
+    "WGC_mine_production_t":     _wgc("WGC_mine_production_t",     "WGC global mine production (tonnes, quarterly)"),
+    "WGC_aisc_spread":           _wgc("WGC_aisc_spread",           "Gold price minus mining AISC (USD/oz, profitability)"),
+    "WGC_scrap_supply_t":        _wgc("WGC_scrap_supply_t",        "WGC gold scrap/recycling supply (tonnes, quarterly)"),
+    "WGC_producer_hedging_t":    _wgc("WGC_producer_hedging_t",    "WGC producer net hedging (tonnes, quarterly)"),
+    "WGC_total_demand_t":        _wgc("WGC_total_demand_t",        "WGC total identified demand (tonnes, quarterly)"),
+    "WGC_total_supply_t":        _wgc("WGC_total_supply_t",        "WGC total supply (tonnes, quarterly)"),
+    "WGC_demand_supply_balance": _wgc("WGC_demand_supply_balance", "WGC demand − supply balance (tonnes, quarterly)"),
+
+    # ── GPR Sub-indexes (6) ──────────────────────────────────────────────────
+    "GPR_nuclear_threats":     _gpr_sub("GPR_nuclear_threats",     "GPR sub-index: nuclear threats (Caldara & Iacoviello)"),
+    "GPR_terror_acts":         _gpr_sub("GPR_terror_acts",         "GPR sub-index: terrorist acts"),
+    "GPR_war_escalation":      _gpr_sub("GPR_war_escalation",      "GPR sub-index: war escalation index"),
+    "GPR_russia":              _gpr_sub("GPR_russia",              "GPR sub-index: Russia-specific geopolitical risk"),
+    "GPR_china":               _gpr_sub("GPR_china",               "GPR sub-index: China-specific geopolitical risk"),
+    "GPR_middle_east":         _gpr_sub("GPR_middle_east",         "GPR sub-index: Middle East geopolitical risk"),
+
+    # ── Crypto & Digital (10) ────────────────────────────────────────────────
+    "Crypto_fear_greed_index":   _crypto("Crypto_fear_greed_index",   "Crypto Fear & Greed Index (0=fear, 100=greed)"),
+    "Crypto_fear_greed_class":   _crypto("Crypto_fear_greed_class",   "Crypto Fear & Greed classification (0-1 encoded)"),
+    "BTC_price_usd":             _crypto("BTC_price_usd",             "Bitcoin spot price (USD)"),
+    "BTC_gold_ratio":            _crypto("BTC_gold_ratio",            "Bitcoin / Gold price ratio"),
+    "PAXG_price_usd":            _crypto("PAXG_price_usd",            "PAX Gold token price (1 oz gold-backed, USD)"),
+    "PAXG_premium":              _crypto("PAXG_premium",              "PAXG price premium vs LBMA PM fix (%)"),
+    "XAUt_price_usd":            _crypto("XAUt_price_usd",            "Tether Gold (XAUt) token price (USD)"),
+    "Stablecoin_total_mcap_bn":  _crypto("Stablecoin_total_mcap_bn",  "Total stablecoin market cap ($ bn)"),
+    "USDT_mcap_bn":              _crypto("USDT_mcap_bn",              "Tether (USDT) market cap ($ bn)"),
+    "Gold_crypto_flow_7d":       _crypto("Gold_crypto_flow_7d",       "7-day net flow into gold-backed crypto (PAXG+XAUt)", "1w"),
+
+    # ── Options / Derivatives (6) ────────────────────────────────────────────
+    "CME_CVOL_gold_atm_iv":    _opt("CME_CVOL_gold_atm_iv",    "CME CVOL Gold ATM implied volatility (%)"),
+    "CME_CVOL_gold_skew":      _opt("CME_CVOL_gold_skew",      "CME CVOL Gold 25-delta risk reversal skew"),
+    "CME_CVOL_term_slope":     _opt("CME_CVOL_term_slope",     "CME CVOL Gold IV term structure slope (3m-1m)"),
+    "GLD_put_call_oi":         _opt("GLD_put_call_oi",         "GLD ETF put/call open interest ratio"),
+    "COMEX_options_max_pain":  _opt("COMEX_options_max_pain",  "COMEX gold options max pain strike (USD/oz)"),
+    "Gold_IV_term_slope":      _opt("Gold_IV_term_slope",      "Gold implied vol term structure slope (6m-1m ATM)"),
+
+    # ── Extra Technical Indicators (25) ──────────────────────────────────────
+    "ROC_1":            _tech("ROC_1",            "1-day Rate of Change (%)"),
+    "ROC_3":            _tech("ROC_3",            "3-day Rate of Change (%)"),
+    "RSI_2":            _tech("RSI_2",            "2-day Relative Strength Index (overbought/oversold)"),
+    "EMA_3":            _tech("EMA_3",            "3-day Exponential Moving Average"),
+    "SMA_252":          _tech("SMA_252",          "252-day (1-year) Simple Moving Average"),
+    "Return_120d":      _tech("Return_120d",      "120-day cumulative log return"),
+    "Return_252d":      _tech("Return_252d",      "252-day cumulative log return"),
+    "HV_120":           _tech("HV_120",           "120-day Historical Volatility (annualized)"),
+    "HV_252":           _tech("HV_252",           "252-day Historical Volatility (annualized)"),
+    "Vol_regime":       _tech("Vol_regime",       "Volatility regime: HV20/HV60 ratio"),
+    "Skewness_60d":     _tech("Skewness_60d",     "60-day return skewness"),
+    "Kurtosis_60d":     _tech("Kurtosis_60d",     "60-day return kurtosis"),
+    "Price_EMA200_ratio": _tech("Price_EMA200_ratio", "Close / EMA200 ratio"),
+    "Price_SMA100_ratio": _tech("Price_SMA100_ratio", "Close / SMA100 ratio"),
+    "EMA20_SMA50_cross":  _tech("EMA20_SMA50_cross",  "EMA20 / SMA50 crossover signal"),
+    "MACD_hist_slope":    _tech("MACD_hist_slope",    "MACD histogram slope (current - previous)"),
+    "RSI_divergence":     _tech("RSI_divergence",     "RSI vs price divergence signal"),
+    "BB_squeeze":         _tech("BB_squeeze",         "Bollinger Band squeeze flag (BB_width < 20th percentile)"),
+    "OBV_slope_20d":      _tech("OBV_slope_20d",      "OBV 20-day linear regression slope", ["close","volume"]),
+    "CMF_20_zscore":      _tech("CMF_20_zscore",      "CMF z-score vs 60-day history", ["high","low","close","volume"]),
+    "Price_open_gap":     _tech("Price_open_gap",     "Open gap: (open - prev_close) / prev_close"),
+    "High_low_spread":    _tech("High_low_spread",    "Daily high-low spread as % of close", ["high","low","close"]),
+    "Upper_shadow":       _tech("Upper_shadow",       "Candlestick upper shadow ratio", ["high","low","close"]),
+    "Lower_shadow":       _tech("Lower_shadow",       "Candlestick lower shadow ratio", ["high","low","close"]),
+    "Body_ratio":         _tech("Body_ratio",         "Candlestick body ratio (abs(close-open)/ATR)", ["high","low","close"]),
+    "Overnight_gap_20d":  _tech("Overnight_gap_20d",  "20-day average overnight gap magnitude"),
+    "Intraday_range_avg": _tech("Intraday_range_avg",  "20-day average intraday high-low range / close", ["high","low","close"]),
 }
 
-assert len(INDICATOR_REGISTRY) == 175, f"Expected 175 indicators, got {len(INDICATOR_REGISTRY)}"
+assert len(INDICATOR_REGISTRY) == 334, f"Expected 334 indicators, got {len(INDICATOR_REGISTRY)}"
