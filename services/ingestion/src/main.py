@@ -28,6 +28,11 @@ from financial_ingestion.connectors.comex import COMEXConnector
 from financial_ingestion.connectors.opensky import OpenSkyConnector
 from financial_ingestion.connectors.eosda_satellite import EOSDAConnector
 from financial_ingestion.connectors.shipsdna import ShipsDNAConnector
+from financial_ingestion.connectors.fred import FREDConnector
+from financial_ingestion.connectors.cboe import CBOEConnector
+from financial_ingestion.connectors.cftc import CFTCConnector
+from financial_ingestion.connectors.eia import EIAConnector
+from financial_ingestion.connectors.lbma import LBMAConnector
 from financial_ingestion.pipeline.publisher import MarketEventPublisher
 from financial_ingestion.pipeline.scheduler import ConnectorScheduleConfig, IngestionScheduler
 from financial_ingestion.rate_limiting.token_bucket import TokenBucketConfig, TokenBucketLimiter
@@ -181,6 +186,44 @@ async def startup() -> None:
             connector=ShipsDNAConnector(http_client, settings.shipsdna_api_key),
             interval_seconds=settings.interval_alternative,
         ))
+
+    # ── New free-data connectors ──────────────────────────────────────────────
+
+    # FRED: hourly (rate-limited to 500 req/day on free tier, we fetch 31 series/hour)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=FREDConnector(http_client, getattr(settings, "fred_api_key", None)),
+        interval_seconds=settings.interval_macro,  # Daily is enough for macro data
+    ))
+
+    # CBOE VIX/VVIX: daily (data refreshes once per day after close)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=CBOEConnector(http_client),
+        interval_seconds=settings.interval_macro,
+    ))
+
+    # CFTC COT: daily poll (report released Fridays, but we poll daily)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=CFTCConnector(http_client),
+        interval_seconds=settings.interval_macro,
+    ))
+
+    # EIA energy prices: daily
+    if getattr(settings, "eia_api_key", None):
+        _scheduler.register(ConnectorScheduleConfig(
+            connector=EIAConnector(http_client, settings.eia_api_key),
+            interval_seconds=settings.interval_macro,
+        ))
+    else:
+        _scheduler.register(ConnectorScheduleConfig(
+            connector=EIAConnector(http_client),
+            interval_seconds=settings.interval_macro,
+        ))
+
+    # LBMA gold fix: daily (AM/PM fixes published on London trading days)
+    _scheduler.register(ConnectorScheduleConfig(
+        connector=LBMAConnector(http_client),
+        interval_seconds=settings.interval_macro,
+    ))
 
     _scheduler.start()
     logger.info("ingestion.startup_complete")

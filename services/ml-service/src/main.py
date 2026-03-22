@@ -32,6 +32,7 @@ from financial_ml.simulation.monte_carlo import simulate_heston, compute_var_es
 from financial_ml.simulation.probability_bands import extract_bands_for_frontend
 from financial_ml.cache.pinecone_client import PineconeSemanticCache
 from financial_ml.routing.model_router import PredictionRouter, ModelTier
+from financial_ml.features import FeaturePipeline, INDICATOR_REGISTRY
 
 configure_logging(settings.log_level)
 configure_tracing("financial-ml")
@@ -45,6 +46,7 @@ _xgb: Any = None
 _ensemble: HybridEnsemble | None = None
 _cache: PineconeSemanticCache | None = None
 _router: PredictionRouter | None = None
+_feature_pipeline: FeaturePipeline | None = None
 
 
 # ---- Request / Response schemas ----
@@ -135,8 +137,18 @@ async def predict(request: PredictRequest) -> PredictResponse:
     tier = ModelTier.LIGHTWEIGHT
 
     if _ensemble is not None:
-        # Simple tabular features for XGBoost
-        tabular = np.array([list(request.macro_features.values()) or [0.0]], dtype=np.float32)
+        # Build 175-indicator tabular feature vector via FeaturePipeline
+        if _feature_pipeline is not None:
+            # Reconstruct OHLCV: use close as proxy (open=high=low=close, volume=0)
+            close_arr = np.array(request.price_history[-settings.lstm_sequence_length:],
+                                 dtype=np.float32)
+            ohlcv_proxy = np.column_stack([close_arr, close_arr, close_arr, close_arr,
+                                           np.ones_like(close_arr)])
+            tabular = _feature_pipeline.transform(
+                ohlcv_proxy, external=request.macro_features
+            ).reshape(1, -1)
+        else:
+            tabular = np.array([list(request.macro_features.values()) or [0.0]], dtype=np.float32)
         result = _ensemble.predict(features[np.newaxis], tabular)
         predictions = (result["prediction"] * prices[-1]).tolist()
         uncertainty = (result["uncertainty_std"] * prices[-1]).tolist()
@@ -206,9 +218,29 @@ async def router_stats() -> JSONResponse:
     return JSONResponse(_router.get_stats())
 
 
+@app.get("/features/registry")
+async def features_registry() -> JSONResponse:
+    """Return the full indicator registry metadata (175 indicators)."""
+    registry_data = {
+        name: {
+            "category":    meta.category,
+            "description": meta.description,
+            "source":      meta.source,
+            "is_computed": meta.is_computed,
+            "freq":        meta.freq,
+            "tags":        meta.tags,
+        }
+        for name, meta in INDICATOR_REGISTRY.items()
+    }
+    return JSONResponse({
+        "total": len(registry_data),
+        "indicators": registry_data,
+    })
+
+
 @app.on_event("startup")
 async def startup() -> None:
-    global _lstm, _xgb, _ensemble, _cache, _router
+    global _lstm, _xgb, _ensemble, _cache, _router, _feature_pipeline
 
     if settings.gcs_emulator_host:
         os.environ["GCS_EMULATOR_HOST"] = settings.gcs_emulator_host
@@ -225,6 +257,10 @@ async def startup() -> None:
         cache=_cache,
         gpr_threshold=settings.gpr_threshold_for_multimodal,
     )
+
+    # Initialize 175-indicator FeaturePipeline
+    _feature_pipeline = FeaturePipeline(INDICATOR_REGISTRY)
+    logger.info("ml.feature_pipeline_initialized indicators=%d", len(INDICATOR_REGISTRY))
 
     # Try to load pre-trained models if they exist
     try:

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-train_xgboost.py — Train XGBoost residual corrector on gold price data.
+train_xgboost.py — Train XGBoost residual corrector using the 175-indicator engine.
 
-XGBoost is trained on LSTM residuals + tabular features (technical indicators,
-macro features). Uses TimeSeriesSplit cross-validation.
+XGBoost is trained on LSTM residuals + the full FeaturePipeline feature vector
+(175 indicators → top-K via FeatureSelector). Uses TimeSeriesSplit CV.
 
 Usage:
     python src/training/train_xgboost.py --asset XAU
-    python src/training/train_xgboost.py --asset XAU --n-estimators 500
+    python src/training/train_xgboost.py --asset XAU --n-estimators 500 --top-k 60
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -46,18 +47,25 @@ except ImportError:
 
 from models.lstm_model import LSTMPriceModel
 from models.model_registry import ModelMeta, ModelRegistry
+from features import FeaturePipeline, FeatureSelector, INDICATOR_REGISTRY
+
+
+# ── Data loading ──────────────────────────────────────────────────────────────
+
+def _pg_connect():
+    return psycopg2.connect(
+        host=os.environ.get("POSTGRES_HOST", "localhost"),
+        port=int(os.environ.get("POSTGRES_PORT", "5432")),
+        dbname=os.environ.get("POSTGRES_DB", "financial_dev"),
+        user=os.environ.get("POSTGRES_USER", "financial"),
+        password=os.environ.get("POSTGRES_PASSWORD", "financial_dev_password"),
+    )
 
 
 def load_price_data(asset: str) -> np.ndarray:
-    pg = {
-        "host":     os.environ.get("POSTGRES_HOST", "localhost"),
-        "port":     int(os.environ.get("POSTGRES_PORT", "5432")),
-        "dbname":   os.environ.get("POSTGRES_DB", "financial_dev"),
-        "user":     os.environ.get("POSTGRES_USER", "financial"),
-        "password": os.environ.get("POSTGRES_PASSWORD", "financial_dev_password"),
-    }
-    conn = psycopg2.connect(**pg)
-    cur = conn.cursor()
+    """Load daily OHLCV bars from Postgres. Returns (N, 5) float32 array."""
+    conn = _pg_connect()
+    cur  = conn.cursor()
     cur.execute("""
         SELECT open, high, low, close, volume
         FROM price_bars
@@ -70,62 +78,37 @@ def load_price_data(asset: str) -> np.ndarray:
     return np.array(rows, dtype=np.float32)
 
 
-def build_tabular_features(data: np.ndarray, lookback: int = 60) -> np.ndarray:
+def load_external_series(asset: str, n_bars: int) -> dict[str, list[float]]:
+    """Load aligned external (macro/alternative) series from Postgres.
+
+    The macro_features table stores daily values for each indicator, aligned
+    to the same trading calendar as price_bars.
+    Returns dict mapping indicator_name → list of floats (length n_bars),
+    forward-filled for missing dates.
     """
-    Build tabular features for XGBoost.
+    try:
+        conn = _pg_connect()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT indicator, value_array
+            FROM macro_feature_series
+            WHERE asset = %s
+            ORDER BY indicator
+        """, (asset,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        result: dict[str, list[float]] = {}
+        for indicator, value_json in rows:
+            vals = json.loads(value_json) if isinstance(value_json, str) else value_json
+            result[indicator] = vals
+        return result
+    except Exception as exc:
+        logger.warning("load_external_series failed: %s — using empty external data", exc)
+        return {}
 
-    Features per bar:
-      - 5-day, 10-day, 20-day, 60-day rolling return
-      - 14-day RSI
-      - ATR (average true range, 14-day)
-      - Close/SMA20 ratio
-      - Volume z-score (20-day)
-    """
-    N = len(data)
-    close  = data[:, 3]
-    high   = data[:, 1]
-    low    = data[:, 2]
-    volume = data[:, 4]
 
-    features = np.zeros((N, 8), dtype=np.float32)
-
-    for i in range(lookback, N):
-        c = close[:i+1]
-        h = high[:i+1]
-        l = low[:i+1]
-        v = volume[:i+1]
-
-        # Rolling returns
-        for j, window in enumerate([5, 10, 20, 60]):
-            if i >= window:
-                features[i, j] = (c[i] / c[i - window]) - 1.0
-
-        # RSI (14-day)
-        if i >= 14:
-            deltas = np.diff(c[i-14:i+1])
-            gain = deltas[deltas > 0].mean() if (deltas > 0).any() else 1e-8
-            loss = -deltas[deltas < 0].mean() if (deltas < 0).any() else 1e-8
-            rs = gain / loss
-            features[i, 4] = 1.0 - (1.0 / (1.0 + rs))
-
-        # ATR (14-day, normalized)
-        if i >= 14:
-            tr = np.maximum(h[i-13:i+1] - l[i-13:i+1],
-                 np.maximum(np.abs(h[i-13:i+1] - c[i-14:i]),
-                            np.abs(l[i-13:i+1] - c[i-14:i])))
-            features[i, 5] = tr.mean() / (c[i] + 1e-8)
-
-        # Close/SMA20
-        if i >= 20:
-            features[i, 6] = c[i] / c[i-20:i+1].mean()
-
-        # Volume z-score (20-day)
-        if i >= 20:
-            vol_slice = v[i-20:i+1]
-            features[i, 7] = (v[i] - vol_slice.mean()) / (vol_slice.std() + 1e-8)
-
-    return features[lookback:]
-
+# ── Training ──────────────────────────────────────────────────────────────────
 
 def train(
     asset: str,
@@ -135,24 +118,31 @@ def train(
     max_depth: int = 5,
     learning_rate: float = 0.05,
     n_splits: int = 5,
+    top_k: int = 60,
 ) -> None:
     import torch
 
     logger.info("Loading data for %s ...", asset)
     data = load_price_data(asset)
-    logger.info("  %d bars", len(data))
+    logger.info("  %d bars loaded", len(data))
 
-    # ── Get LSTM predictions (residuals target) ───────────────
-    registry = ModelRegistry()
+    # ── Build 175-feature matrix via FeaturePipeline ──────────────────────────
+    logger.info("Building 175-indicator feature matrix ...")
+    pipeline = FeaturePipeline(INDICATOR_REGISTRY)
+    external_series = load_external_series(asset, len(data))
+    X_full = pipeline.fit_transform(data, external_series, lookback=lookback)
+    feature_names = pipeline.get_feature_names()
+    logger.info("  Feature matrix shape: %s  (%d indicators)", X_full.shape, len(feature_names))
+
+    # ── Get LSTM predictions (residuals target) ───────────────────────────────
+    registry    = ModelRegistry()
     lstm_result = registry.load_lstm(asset)
 
     if lstm_result is None:
-        logger.warning("No LSTM model found for %s — training XGBoost on raw returns", asset)
-        # Fall back: predict next-day return from tabular features
-        X_tab = build_tabular_features(data, lookback)
-        close  = data[lookback:, 3]
-        y = np.log(close[1:] / close[:-1])   # next-day log return
-        X_tab = X_tab[:-1]  # align
+        logger.warning("No LSTM model for %s — training XGBoost on raw returns", asset)
+        close = data[lookback:, 3]
+        y     = np.log(close[1:] / close[:-1])   # next-day log return
+        X_tab = X_full[:-1]
     else:
         lstm_state, lstm_meta = lstm_result
         lstm_model = LSTMPriceModel(
@@ -165,48 +155,56 @@ def train(
         lstm_model.load_state_dict(lstm_state)
         lstm_model.eval()
 
-        # Build sequences
-        sequences = []
-        targets   = []
+        sequences, targets = [], []
         for i in range(lookback, len(data) - horizon):
-            seq = data[i - lookback: i].copy()
-            # z-score each feature
+            seq  = data[i - lookback: i].copy().astype(np.float32)
             mean = seq.mean(axis=0)
             std  = seq.std(axis=0) + 1e-8
-            seq  = (seq - mean) / std
-            sequences.append(seq)
-            targets.append(data[i + horizon - 1, 3])  # close price at horizon
+            sequences.append((seq - mean) / std)
+            targets.append(data[i + horizon - 1, 3])
 
         X_seq = torch.tensor(np.array(sequences))
         with torch.no_grad():
             preds, _ = lstm_model(X_seq)
-            lstm_preds = preds[:, -1, 0].numpy()  # last forecast step, mean
+            lstm_preds = preds[:, -1, 0].numpy()
 
-        targets = np.array(targets, dtype=np.float32)
+        targets   = np.array(targets, dtype=np.float32)
         residuals = targets - lstm_preds
 
-        X_tab = build_tabular_features(data, lookback)[:len(residuals)]
-        y = residuals
+        X_tab = X_full[: len(residuals)]
+        y     = residuals
 
-    # ── TimeSeriesSplit cross-validation ──────────────────────
+    assert len(X_tab) == len(y), f"Shape mismatch: X={X_tab.shape}, y={y.shape}"
+
+    # ── Feature Selection: 175 → top_k ───────────────────────────────────────
+    logger.info("Selecting top-%d features from %d ...", top_k, X_tab.shape[1])
+    selector  = FeatureSelector(top_k=top_k, method="xgboost_importance")
+    selector.fit(X_tab, y, feature_names)
+    X_sel     = selector.transform(X_tab)
+    sel_names = selector.get_selected_features()
+    logger.info("  Selected: %s ...", sel_names[:5])
+
+    # ── TimeSeriesSplit cross-validation ──────────────────────────────────────
     logger.info("Training XGBoost with %d-fold TimeSeriesSplit ...", n_splits)
-
-    tscv  = TimeSeriesSplit(n_splits=n_splits)
+    tscv    = TimeSeriesSplit(n_splits=n_splits)
     rmses, maes = [], []
 
-    for fold, (train_idx, val_idx) in enumerate(tscv.split(X_tab)):
-        dtrain = xgb.DMatrix(X_tab[train_idx], label=y[train_idx])
-        dval   = xgb.DMatrix(X_tab[val_idx],   label=y[val_idx])
-        params = {
-            "objective":        "reg:squarederror",
-            "max_depth":        max_depth,
-            "learning_rate":    learning_rate,
-            "subsample":        0.8,
-            "colsample_bytree": 0.8,
-            "alpha":            0.1,
-            "lambda":           1.0,
-            "seed":             42,
-        }
+    params = {
+        "objective":        "reg:squarederror",
+        "max_depth":        max_depth,
+        "learning_rate":    learning_rate,
+        "subsample":        0.8,
+        "colsample_bytree": 0.8,
+        "alpha":            0.1,
+        "lambda":           1.0,
+        "seed":             42,
+    }
+
+    for fold, (train_idx, val_idx) in enumerate(tscv.split(X_sel)):
+        dtrain = xgb.DMatrix(X_sel[train_idx], label=y[train_idx],
+                             feature_names=sel_names)
+        dval   = xgb.DMatrix(X_sel[val_idx],   label=y[val_idx],
+                             feature_names=sel_names)
         bst = xgb.train(
             params, dtrain, num_boost_round=n_estimators,
             evals=[(dval, "val")],
@@ -214,60 +212,75 @@ def train(
             early_stopping_rounds=20,
         )
         val_preds = bst.predict(dval)
-        rmse = np.sqrt(mean_squared_error(y[val_idx], val_preds))
-        mae  = mean_absolute_error(y[val_idx], val_preds)
+        rmse = float(np.sqrt(mean_squared_error(y[val_idx], val_preds)))
+        mae  = float(mean_absolute_error(y[val_idx], val_preds))
         rmses.append(rmse)
         maes.append(mae)
         logger.info("  Fold %d: rmse=%.4f mae=%.4f", fold + 1, rmse, mae)
 
     logger.info("CV RMSE: %.4f ± %.4f", np.mean(rmses), np.std(rmses))
 
-    # ── Full training ─────────────────────────────────────────
-    dtrain_full = xgb.DMatrix(X_tab, label=y)
-    final_bst = xgb.train(
-        params, dtrain_full, num_boost_round=n_estimators,
-        verbose_eval=False,
-    )
+    # ── Full training on all data ─────────────────────────────────────────────
+    dtrain_full = xgb.DMatrix(X_sel, label=y, feature_names=sel_names)
+    final_bst   = xgb.train(params, dtrain_full, num_boost_round=n_estimators,
+                             verbose_eval=False)
 
-    # ── Save ──────────────────────────────────────────────────
+    # ── Save model + selector state ───────────────────────────────────────────
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         tmp_path = Path(f.name)
     final_bst.save_model(str(tmp_path))
 
     version = registry.next_version(asset, "xgboost")
     meta = ModelMeta(
-        asset=asset,
-        model_type="xgboost",
-        version=version,
-        trained_at=datetime.now(timezone.utc).isoformat(),
-        horizon_days=horizon,
-        feature_count=X_tab.shape[1],
-        training_rows=len(X_tab),
-        rmse=float(np.mean(rmses)),
-        mae=float(np.mean(maes)),
+        asset         = asset,
+        model_type    = "xgboost",
+        version       = version,
+        trained_at    = datetime.now(timezone.utc).isoformat(),
+        horizon_days  = horizon,
+        feature_count = len(sel_names),
+        training_rows = len(X_sel),
+        rmse          = float(np.mean(rmses)),
+        mae           = float(np.mean(maes)),
     )
     registry.save_xgboost(tmp_path, meta)
     tmp_path.unlink(missing_ok=True)
-    logger.info("Saved XGBoost v%d (cv_rmse=%.4f)", version, np.mean(rmses))
+
+    # Persist FeatureSelector alongside model in GCS
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        sel_tmp = Path(f.name)
+    selector.save(str(sel_tmp))
+    try:
+        registry.save_artifact(sel_tmp, f"feature_selector/{asset}/v{version}.json")
+    except Exception:
+        pass
+    sel_tmp.unlink(missing_ok=True)
+
+    logger.info(
+        "Saved XGBoost v%d (cv_rmse=%.4f, features=%d selected from %d)",
+        version, float(np.mean(rmses)), len(sel_names), len(feature_names),
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train XGBoost residual corrector")
+    parser = argparse.ArgumentParser(description="Train XGBoost residual corrector (175-indicator)")
     parser.add_argument("--asset",         default="XAU")
     parser.add_argument("--lookback",      type=int, default=60)
     parser.add_argument("--horizon",       type=int, default=5)
     parser.add_argument("--n-estimators",  type=int, default=300)
     parser.add_argument("--max-depth",     type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=0.05)
+    parser.add_argument("--top-k",         type=int, default=60,
+                        help="Number of features to select (default 60 of 175)")
     args = parser.parse_args()
 
     train(
-        asset=args.asset,
-        lookback=args.lookback,
-        horizon=args.horizon,
-        n_estimators=args.n_estimators,
-        max_depth=args.max_depth,
-        learning_rate=args.learning_rate,
+        asset         = args.asset,
+        lookback      = args.lookback,
+        horizon       = args.horizon,
+        n_estimators  = args.n_estimators,
+        max_depth     = args.max_depth,
+        learning_rate = args.learning_rate,
+        top_k         = args.top_k,
     )
 
 

@@ -34,6 +34,8 @@ class IngestionSettings(BaseSettings):
     comex_api_key: str | None = Field(default=None)
     eosda_api_key: str = Field(default="")
     shipsdna_api_key: str = Field(default="")
+    fred_api_key: str | None = Field(default=None)
+    eia_api_key: str | None = Field(default=None)
 
     # Polling intervals (seconds)
     interval_metals_price: int = Field(default=300)      # 5 minutes
